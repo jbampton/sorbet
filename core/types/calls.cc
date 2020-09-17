@@ -1786,7 +1786,7 @@ public:
         // args[3] are the splat arguments
         // args[4] is the block
 
-        if (args.args.size() != 4) {
+        if (args.args.size() != 5) {
             return;
         }
         auto &receiver = args.args[0];
