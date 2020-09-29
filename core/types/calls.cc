@@ -696,7 +696,6 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
     TypePtr kwargs;
     Loc kwargsLoc;
     if (numKwargs > 0 || hasKwsplat) {
-
         // for cases where the method accepts keyword arguments, none were given, but more positional arguments were
         // given than were expected, just take the location from the last argument of the keyword args list.
         if (numKwargs == 0) {
@@ -765,8 +764,8 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                 // consume the keyword args hash as though it was a positional arg.
                 if (auto e = matchArgType(gs, *constr, core::Loc(args.locs.file, args.locs.call),
                                           core::Loc(args.locs.file, args.locs.receiver), symbol, method,
-                                          TypeAndOrigins{kwargs, {kwargsLoc}}, *pit, args.selfType, targs,
-                                          kwargsLoc, args.args.size() == 1)) {
+                                          TypeAndOrigins{kwargs, {kwargsLoc}}, *pit, args.selfType, targs, kwargsLoc,
+                                          args.args.size() == 1)) {
                     result.main.errors.emplace_back(std::move(e));
                 }
 
@@ -802,7 +801,6 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                 result.main.errors.emplace_back(e.build());
             }
         }
-
     }
 
     // keep this around so we know which keyword arguments have been supplied
@@ -1970,6 +1968,8 @@ public:
         auto selfTy = args.args[0]->type;
         SymbolRef self = unwrapSymbol(selfTy.get());
 
+        u1 numPosArgs = args.numPosArgs - 1;
+
         InlinedVector<const TypeAndOrigins *, 2> sendArgStore;
         InlinedVector<LocOffsets, 2> sendArgLocs;
         for (int i = 1; i < args.args.size(); ++i) {
@@ -1984,7 +1984,7 @@ public:
             // In the case that `self` is not a singleton class, we know that
             // this was a call to `new` outside of a self context. Dispatch to
             // an instance method named new, and see what happens.
-            DispatchArgs innerArgs{Names::new_(), sendLocs, args.numPosArgs, sendArgStore, selfTy, selfTy, args.block};
+            DispatchArgs innerArgs{Names::new_(), sendLocs, numPosArgs, sendArgStore, selfTy, selfTy, args.block};
             dispatched = selfTy->dispatchCall(gs, innerArgs);
             returnTy = dispatched.returnType;
         } else {
@@ -1996,7 +1996,7 @@ public:
             ENFORCE(attachedClass.exists());
 
             auto instanceTy = self.data(gs)->attachedClass(gs).data(gs)->externalType(gs);
-            DispatchArgs innerArgs{Names::initialize(), sendLocs,   args.numPosArgs, sendArgStore,
+            DispatchArgs innerArgs{Names::initialize(), sendLocs,   numPosArgs, sendArgStore,
                                    instanceTy,          instanceTy, args.block};
             dispatched = instanceTy->dispatchCall(gs, innerArgs);
 
