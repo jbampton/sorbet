@@ -748,7 +748,6 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         }
 
         kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
-        ait += nonPosArgs;
 
         // Detect the case where not all positional arguments were supplied, causing the keyword args to be consumed as 
         if (pit != pend && !pit->flags.isBlock) {
@@ -769,8 +768,10 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                     pit++;
                 }
 
-                // Clear out the kwargs hash so that no keyword argument processing is triggered below
+                // Clear out the kwargs hash so that no keyword argument processing is triggered below, and also mark
+                // the keyword args as consumed.
                 kwargs = nullptr;
+                ait += nonPosArgs;
             }
         }
     }
@@ -806,6 +807,9 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
     UnorderedSet<NameRef> consumed;
     if (hasKwargs) {
         if (auto *hash = cast_type<ShapeType>(kwargs.get())) {
+            // Mark the keyword args as consumed
+            ait += nonPosArgs;
+
             // find keyword arguments and advance `pend` before them; We'll walk
             // `kwit` ahead below
             auto kwit = pit;
