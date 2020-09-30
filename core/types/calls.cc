@@ -642,8 +642,9 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
     }
     auto posArgs = args.numPosArgs;
     bool hasKwargs = absl::c_any_of(data->arguments(), [](const auto &arg) { return arg.flags.isKeyword; });
-    auto numKwargs = (args.args.size() - args.numPosArgs) & ~0x1;
-    bool hasKwsplat = (args.args.size() - args.numPosArgs) & 0x1;
+    auto nonPosArgs = (args.args.size() - args.numPosArgs);
+    auto numKwargs = nonPosArgs & ~0x1;
+    bool hasKwsplat = nonPosArgs & 0x1;
 
     // p -> params, i.e., what was mentioned in the defintiion
     auto pit = data->arguments().begin();
@@ -771,7 +772,11 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
             if (!pit->flags.isRepeated) {
                 pit++;
             }
+
+            // advance the argument iterator over the keyword arguments that have been processed
+            ait += nonPosArgs;
         }
+
     }
 
     if (pit != pend) {
@@ -806,7 +811,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
     if (hasKwargs) {
         if (auto *hash = cast_type<ShapeType>(kwargs.get())) {
             // advance the argument iterator over the keyword arguments that have been processed
-            ait += numKwargs;
+            ait += nonPosArgs;
 
             // find keyword arguments and advance `pend` before them; We'll walk
             // `kwit` ahead below
@@ -889,8 +894,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                 }
             }
         } else {
-            // We have keyword arguments, but we didn't consume a hash at the
-            // end. Report an error for each missing required keyword arugment.
+            // The method has keyword arguments, but none were provided. Report an error for each missing argument.
             for (auto &spec : data->arguments()) {
                 if (!spec.flags.isKeyword || spec.flags.isDefault || spec.flags.isRepeated) {
                     continue;
