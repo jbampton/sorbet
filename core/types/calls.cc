@@ -684,8 +684,8 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         ++ait;
     }
 
-    // If there are positional arguments remaining, the method accepts keyword arguments, and the send doesn't provide
-    // any explicit keyword arguments, there's an implicit keyword args hash to check.
+    // If positional arguments remain, the method accepts keyword arguments, and no keyword arguments were provided in
+    // the send, assume that the last argument is an implicit keyword args hash.
     if (ait != posEnd && hasKwargs && args.args.size() == args.numPosArgs) {
         // NOTE: this would be a good place for an autocorrect to using `**kwhash`
         hasKwsplat = true;
@@ -758,20 +758,18 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         // Handling this case explicitly is a consequence of inlining the keyword args directly in the send; if the args
         // were always present as a keyword args hash, this would happen naturally in the initial loop that processes
         // parameters and arguments.
-        if (!hasKwargs && pit != pend) {
-            if (!(pit->flags.isDefault || pit->flags.isBlock)) {
-                // If there are positional arguments left to be filled, but there were keyword arguments present,
-                // consume the keyword args hash as though it was a positional arg.
-                if (auto e = matchArgType(gs, *constr, core::Loc(args.locs.file, args.locs.call),
-                                          core::Loc(args.locs.file, args.locs.receiver), symbol, method,
-                                          TypeAndOrigins{kwargs, {kwargsLoc}}, *pit, args.selfType, targs, kwargsLoc,
-                                          args.args.size() == 1)) {
-                    result.main.errors.emplace_back(std::move(e));
-                }
+        if (!hasKwargs && pit != pend && !pit->flags.isBlock) {
+            // If there are positional arguments left to be filled, but there were keyword arguments present,
+            // consume the keyword args hash as though it was a positional arg.
+            if (auto e = matchArgType(gs, *constr, core::Loc(args.locs.file, args.locs.call),
+                                      core::Loc(args.locs.file, args.locs.receiver), symbol, method,
+                                      TypeAndOrigins{kwargs, {kwargsLoc}}, *pit, args.selfType, targs, kwargsLoc,
+                                      args.args.size() == 1)) {
+                result.main.errors.emplace_back(std::move(e));
+            }
 
-                if (!pit->flags.isRepeated) {
-                    pit++;
-                }
+            if (!pit->flags.isRepeated) {
+                pit++;
             }
         }
     }
