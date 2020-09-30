@@ -551,12 +551,18 @@ void GlobalState::initEmpty() {
         auto &arg = enterMethodArgumentSymbol(Loc::none(), method, Names::blkArg());
         arg.flags.isBlock = true;
     }
-    // Synthesize <Magic>.<self-new>(arg: *T.untyped) => T.untyped
+    // Synthesize <Magic>.<self-new>(arg: *T.untyped, kwargs: **T.untyped) => T.untyped
     method = enterMethodSymbol(Loc::none(), Symbols::MagicSingleton(), Names::selfNew());
     {
         auto &arg = enterMethodArgumentSymbol(Loc::none(), method, Names::arg0());
         arg.type = Types::untyped(*this, method);
         arg.flags.isRepeated = true;
+    }
+    {
+        auto &arg = enterMethodArgumentSymbol(Loc::none(), method, Names::arg1());
+        arg.type = Types::untyped(*this, method);
+        arg.flags.isRepeated = true;
+        arg.flags.isKeyword = true;
     }
     method.data(*this)->resultType = Types::untyped(*this, method);
     {
