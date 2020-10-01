@@ -66,7 +66,7 @@ vector<ast::TreePtr> Struct::run(core::MutableContext ctx, ast::Assign *asgn) {
     bool keywordInit = false;
     auto kwArgsTree = ASTUtil::mkKwArgsHash(send);
     if (auto *hash = ast::cast_tree<ast::Hash>(kwArgsTree)) {
-        if (send->numPosArgs == 1) {
+        if (send->numPosArgs == 0) {
             // leave bad usages like `Struct.new(keyword_init: true)` untouched so we error later
             return empty;
         }
