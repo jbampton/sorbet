@@ -21,13 +21,6 @@ bool isKeywordInitKey(const core::GlobalState &gs, const ast::TreePtr &node) {
     return false;
 }
 
-bool isLiteralTrue(const core::GlobalState &gs, const ast::TreePtr &node) {
-    if (auto *lit = ast::cast_tree_const<ast::Literal>(node)) {
-        return lit->isTrue(gs);
-    }
-    return false;
-}
-
 } // namespace
 
 vector<ast::TreePtr> Struct::run(core::MutableContext ctx, ast::Assign *asgn) {
@@ -64,24 +57,37 @@ vector<ast::TreePtr> Struct::run(core::MutableContext ctx, ast::Assign *asgn) {
     ast::ClassDef::RHS_store body;
 
     bool keywordInit = false;
-    auto kwArgsTree = ASTUtil::mkKwArgsHash(send);
-    if (auto *hash = ast::cast_tree<ast::Hash>(kwArgsTree)) {
+    if (send->hasKwArgs()) {
         if (send->numPosArgs == 0) {
             // leave bad usages like `Struct.new(keyword_init: true)` untouched so we error later
             return empty;
         }
-        if (hash->keys.size() != 1) {
+        if (send->hasKwSplat()) {
             return empty;
         }
-        auto &key = hash->keys.front();
-        auto &value = hash->values.front();
-        if (isKeywordInitKey(ctx, key) && isLiteralTrue(ctx, value)) {
-            keywordInit = true;
+        auto [posEnd,kwEnd] = send->kwArgsRange();
+        if (kwEnd - posEnd != 2) {
+            return empty;
+        }
+
+        auto &key = send->args[posEnd];
+        if (!isKeywordInitKey(ctx, key)) {
+            return empty;
+        }
+
+        auto &value = send->args[posEnd+1];
+        if (auto *lit = ast::cast_tree_const<ast::Literal>(value)) {
+            if (lit->isTrue(ctx)) {
+                keywordInit = true;
+            } else if (!lit->isFalse(ctx)) {
+                return empty;
+            }
+        } else {
+            return empty;
         }
     }
 
-    const auto n = keywordInit ? send->args.size() - 1 : send->args.size();
-    for (int i = 0; i < n; i++) {
+    for (int i = 0; i < send->numPosArgs; i++) {
         auto *sym = ast::cast_tree<ast::Literal>(send->args[i]);
         if (!sym || !sym->isSymbol(ctx)) {
             return empty;
