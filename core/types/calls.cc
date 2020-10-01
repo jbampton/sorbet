@@ -690,7 +690,6 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
     if (ait != posEnd && hasKwargs && args.args.size() == args.numPosArgs) {
         // NOTE: this would be a good place for an autocorrect to using `**kwhash`
         hasKwsplat = true;
-        posArgs = max(0, posArgs - 1);
     }
 
     // Extract the kwargs hash if there are keyword args present in the send
