@@ -727,29 +727,34 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
             auto &kwSplatArg = *(aend - 1);
             auto kwSplatType = Types::approximate(gs, kwSplatArg->type, *constr);
 
-            if (kwSplatType->isUntyped()) {
-                // Allow an untyped arg to satisfy all kwargs
-                --aend;
-            } else if (auto *hash = cast_type<ShapeType>(kwSplatType.get())) {
+            if (auto *hash = cast_type<ShapeType>(kwSplatType.get())) {
                 absl::c_copy(hash->keys, back_inserter(keys));
                 absl::c_copy(hash->values, back_inserter(values));
                 --aend;
-            } else if (kwSplatType->derivesFrom(gs, Symbols::Hash())) {
-                --aend;
-                if (auto e = gs.beginError(core::Loc(args.locs.file, args.locs.call), errors::Infer::UntypedSplat)) {
-                    e.setHeader(
-                        "Passing a hash where the specific keys are unknown to a method taking keyword arguments");
-                    e.addErrorSection(ErrorSection("Got " + kwSplatType->show(gs) + " originating from:",
-                                                   kwSplatArg->origins2Explanations(gs)));
-                    result.main.errors.emplace_back(e.build());
+            } else {
+                kwargs = kwSplatType;
+                if (kwSplatType->isUntyped()) {
+                    // Allow an untyped arg to satisfy all kwargs
+                    --aend;
+                } else if (kwSplatType->derivesFrom(gs, Symbols::Hash())) {
+                    --aend;
+                    if (auto e = gs.beginError(core::Loc(args.locs.file, args.locs.call), errors::Infer::UntypedSplat)) {
+                        e.setHeader(
+                            "Passing a hash where the specific keys are unknown to a method taking keyword arguments");
+                        e.addErrorSection(ErrorSection("Got " + kwSplatType->show(gs) + " originating from:",
+                                                       kwSplatArg->origins2Explanations(gs)));
+                        result.main.errors.emplace_back(e.build());
+                    }
                 }
             }
         }
 
-        kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
+        if (kwargs == nullptr) {
+            kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
+        }
 
         // Detect the case where not all positional arguments were supplied, causing the keyword args to be consumed as 
-        if (pit != pend && !pit->flags.isBlock) {
+        if (kwargs != nullptr && pit != pend && !pit->flags.isBlock) {
             if (!hasKwargs || (!pit->flags.isRepeated && !pit->flags.isKeyword && !pit->flags.isDefault)) {
                 // TODO(trevor) if `hasKwargs` is true at this point but not keyword args were provided, we could add an
                 // autocorrect to turn this into `**kwargs`
@@ -890,7 +895,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                     result.main.errors.emplace_back(e.build());
                 }
             }
-        } else {
+        } else if (kwargs == nullptr) {
             // The method has keyword arguments, but none were provided. Report an error for each missing argument.
             for (auto &spec : data->arguments()) {
                 if (!spec.flags.isKeyword || spec.flags.isDefault || spec.flags.isRepeated) {
