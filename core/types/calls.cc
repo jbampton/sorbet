@@ -772,6 +772,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                 // the keyword args as consumed.
                 kwargs = nullptr;
                 ait += nonPosArgs;
+                posArgs++;
             }
         }
     }
