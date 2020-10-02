@@ -723,6 +723,7 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         }
 
         // merge in the keyword splat argument if it's present
+        bool makeKwargs = true;
         if (hasKwsplat) {
             auto &kwSplatArg = *(aend - 1);
             auto kwSplatType = Types::approximate(gs, kwSplatArg->type, *constr);
@@ -732,10 +733,11 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                 absl::c_copy(hash->values, back_inserter(values));
                 --aend;
             } else {
-                kwargs = kwSplatType;
+                makeKwargs = false;
                 if (kwSplatType->isUntyped()) {
                     // Allow an untyped arg to satisfy all kwargs
                     --aend;
+                    kwargs = Types::untypedUntracked();
                 } else if (kwSplatType->derivesFrom(gs, Symbols::Hash())) {
                     --aend;
                     if (auto e = gs.beginError(core::Loc(args.locs.file, args.locs.call), errors::Infer::UntypedSplat)) {
@@ -745,11 +747,12 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                                                        kwSplatArg->origins2Explanations(gs)));
                         result.main.errors.emplace_back(e.build());
                     }
+                    kwargs = Types::untypedUntracked();
                 }
             }
         }
 
-        if (kwargs == nullptr) {
+        if (makeKwargs) {
             kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
         }
 
