@@ -709,13 +709,24 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         vector<TypePtr> keys;
         vector<TypePtr> values;
 
-        // process keyword argument pairs
+        // process inlined keyword arguments
         {
             auto kwit = args.args.begin() + args.numPosArgs;
             auto kwend = args.args.begin() + args.numPosArgs + numKwargs;
 
             while (kwit != kwend) {
+                // if the key isn't a symbol literal, break out as this is not a valid keyword
                 auto &key = *kwit++;
+                auto *lit = cast_type<LiteralType>(key->type.get());
+                if (!lit || lit->literalKind != LiteralType::LiteralTypeKind::Symbol) {
+
+                    // TODO(trevor) add an error
+
+                    keys.clear();
+                    values.clear();
+                    break;
+                }
+
                 auto &val = *kwit++;
                 keys.emplace_back(key->type);
                 values.emplace_back(val->type);
@@ -723,7 +734,6 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
         }
 
         // merge in the keyword splat argument if it's present
-        bool makeKwargs = true;
         if (hasKwsplat) {
             auto &kwSplatArg = *(aend - 1);
             auto kwSplatType = Types::approximate(gs, kwSplatArg->type, *constr);
@@ -731,16 +741,17 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
             if (auto *hash = cast_type<ShapeType>(kwSplatType.get())) {
                 absl::c_copy(hash->keys, back_inserter(keys));
                 absl::c_copy(hash->values, back_inserter(values));
+                kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
                 --aend;
             } else {
-                makeKwargs = false;
                 if (kwSplatType->isUntyped()) {
                     // Allow an untyped arg to satisfy all kwargs
                     --aend;
                     kwargs = Types::untypedUntracked();
                 } else if (kwSplatType->derivesFrom(gs, Symbols::Hash())) {
                     --aend;
-                    if (auto e = gs.beginError(core::Loc(args.locs.file, args.locs.call), errors::Infer::UntypedSplat)) {
+                    if (auto e =
+                            gs.beginError(core::Loc(args.locs.file, args.locs.call), errors::Infer::UntypedSplat)) {
                         e.setHeader(
                             "Passing a hash where the specific keys are unknown to a method taking keyword arguments");
                         e.addErrorSection(ErrorSection("Got " + kwSplatType->show(gs) + " originating from:",
@@ -750,13 +761,11 @@ DispatchResult dispatchCallSymbol(const GlobalState &gs, DispatchArgs args,
                     kwargs = Types::untypedUntracked();
                 }
             }
-        }
-
-        if (makeKwargs) {
+        } else {
             kwargs = make_type<ShapeType>(Types::hashOfUntyped(), move(keys), move(values));
         }
 
-        // Detect the case where not all positional arguments were supplied, causing the keyword args to be consumed as 
+        // Detect the case where not all positional arguments were supplied, causing the keyword args to be consumed as
         if (kwargs != nullptr && pit != pend && !pit->flags.isBlock) {
             if (!hasKwargs || (!pit->flags.isRepeated && !pit->flags.isKeyword && !pit->flags.isDefault)) {
                 // TODO(trevor) if `hasKwargs` is true at this point but not keyword args were provided, we could add an
